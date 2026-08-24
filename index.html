@@ -1412,16 +1412,20 @@ function YearAdvancementWizard({ fromYear, toYear, onDone, onSkip }) {
       const gr5stored = await loadShared(learnersKey("5",""), null);
       const gr5base = gr5stored || (INITIAL_LEARNERS["5"][""]||[]);
       const gr5names = gr5base.map(l=>l.name||l);
+      // Assessment No. lives on the roster record — carry it forward by name
+      // so promotion never silently drops it, same as every other field here.
+      const gr5admNoByName = {};
+      gr5base.forEach(l => { if (l && typeof l === "object") gr5admNoByName[l.name] = l.admNo || ""; });
 
       if (grade5to6Mode === "single") {
-        await saveShared(learnersKey("6","East"), gr5names.map(n=>({name:n})));
+        await saveShared(learnersKey("6","East"), gr5names.map(n=>({name:n, admNo:gr5admNoByName[n]||""})));
         await saveShared(learnersKey("6","West"), []);
         await saveShared(`sision_teacher_6_East_${toYear}`, grade6Single_teacher);
       } else {
         const eastList = gr5names.filter(n => grade6StreamAssign[n]==="East");
         const westList = gr5names.filter(n => grade6StreamAssign[n]==="West");
-        await saveShared(learnersKey("6","East"), eastList.map(n=>({name:n})));
-        await saveShared(learnersKey("6","West"), westList.map(n=>({name:n})));
+        await saveShared(learnersKey("6","East"), eastList.map(n=>({name:n, admNo:gr5admNoByName[n]||""})));
+        await saveShared(learnersKey("6","West"), westList.map(n=>({name:n, admNo:gr5admNoByName[n]||""})));
         await saveShared(`sision_teacher_6_East_${toYear}`, grade6East_teacher);
         await saveShared(`sision_teacher_6_West_${toYear}`, grade6West_teacher);
       }
@@ -1430,25 +1434,25 @@ function YearAdvancementWizard({ fromYear, toYear, onDone, onSkip }) {
       // ── 3. Grade 4 → Grade 5 ────────────────────────────────────────────
       const gr4stored = await loadShared(learnersKey("4",""), null);
       const gr4base = gr4stored || (INITIAL_LEARNERS["4"][""]||[]);
-      await saveShared(learnersKey("5",""), gr4base.map(l=>({name:l.name||l})));
+      await saveShared(learnersKey("5",""), gr4base.map(l=>({name:l.name||l, admNo:(l&&typeof l==="object"&&l.admNo)||""})));
       await saveShared(`sision_teacher_5_none_${toYear}`, grade5Teacher);
 
       // ── 4. Grade 3 → Grade 4 ────────────────────────────────────────────
       const gr3stored = await loadShared(learnersKey("3",""), null);
       const gr3base = gr3stored || (INITIAL_LEARNERS["3"][""]||[]);
-      await saveShared(learnersKey("4",""), gr3base.map(l=>({name:l.name||l})));
+      await saveShared(learnersKey("4",""), gr3base.map(l=>({name:l.name||l, admNo:(l&&typeof l==="object"&&l.admNo)||""})));
       await saveShared(`sision_teacher_4_none_${toYear}`, grade4Teacher);
 
       // ── 5. Grade 2 → Grade 3 ────────────────────────────────────────────
       const gr2stored = await loadShared(learnersKey("2",""), null);
       const gr2base = gr2stored || (INITIAL_LEARNERS["2"][""]||[]);
-      await saveShared(learnersKey("3",""), gr2base.map(l=>({name:l.name||l})));
+      await saveShared(learnersKey("3",""), gr2base.map(l=>({name:l.name||l, admNo:(l&&typeof l==="object"&&l.admNo)||""})));
       await saveShared(`sision_teacher_3_none_${toYear}`, grade3Teacher);
 
       // ── 6. Grade 1 → Grade 2 ────────────────────────────────────────────
       const gr1stored = await loadShared(learnersKey("1",""), null);
       const gr1base = gr1stored || (INITIAL_LEARNERS["1"][""]||[]);
-      await saveShared(learnersKey("2",""), gr1base.map(l=>({name:l.name||l})));
+      await saveShared(learnersKey("2",""), gr1base.map(l=>({name:l.name||l, admNo:(l&&typeof l==="object"&&l.admNo)||""})));
       await saveShared(`sision_teacher_2_none_${toYear}`, grade2Teacher);
 
       // ── 7. Register new Grade 1 ─────────────────────────────────────────
@@ -1800,7 +1804,6 @@ function PrintableClassList({ learners, grade, stream, term, year, classTeacher,
           )}
         </tbody>
       </table>
-      <div style={{flex:1}}></div>
       <div style={CL.footer}>{CURRENT_SCHOOL.name} · {term} {year} · {label} · {new Date().toLocaleDateString()}</div>
     </div>
   );
@@ -1943,7 +1946,6 @@ function ReportCard({ learner, grade, stream, term, year, classTeacher, closingD
           {/* Exam progress table removed */}
         </div>
       </div>
-      <div style={{flex:1}}></div>
       <div style={RC.footer}>{term} {year} · {CURRENT_SCHOOL.name}{CURRENT_SCHOOL.county?", "+CURRENT_SCHOOL.county:""}{CURRENT_SCHOOL.motto?" · "+CURRENT_SCHOOL.motto:""}</div>
     </div>
   );
@@ -1952,6 +1954,7 @@ function ReportCard({ learner, grade, stream, term, year, classTeacher, closingD
 // ─── MODALS ───────────────────────────────────────────────────────────────────
 function ScoreEntryModal({ learner, grade, splitMode, classOptions, onSave, onClose }) {
   const [scores, setScores] = useState({...blankScores(),...learner.scores});
+  const [admNo, setAdmNo] = useState(learner.admNo || "");
   const [name, setName] = useState(learner.name);
   const opts = (classOptions && classOptions.length) ? classOptions : ["East","West"];
   const [streamSel, setStreamSel] = useState(learner.stream || opts[0]);
@@ -1960,6 +1963,10 @@ function ScoreEntryModal({ learner, grade, splitMode, classOptions, onSave, onCl
       <div style={M.box}>
         <div style={M.title}>Edit Learner — {learner.name}</div>
         <div style={{display:"flex",gap:11,marginBottom:14,flexWrap:"wrap"}}>
+          <div style={{...M.field,flex:1,minWidth:120}}>
+            <label style={M.label}>Assessment No.</label>
+            <input style={M.input} value={admNo} onChange={e=>setAdmNo(e.target.value)} placeholder="e.g. 12345678" />
+          </div>
           <div style={{...M.field,flex:2,minWidth:180}}>
             <label style={M.label}>Full Name</label>
             <input style={M.input} value={name} onChange={e=>setName(e.target.value.toUpperCase())} />
@@ -1990,7 +1997,7 @@ function ScoreEntryModal({ learner, grade, splitMode, classOptions, onSave, onCl
         </div>
         <div style={M.actions}>
           <button style={M.cancel} onClick={onClose}>Cancel</button>
-          <button style={M.save} onClick={()=>onSave({name:name.trim()||learner.name, scores, stream:streamSel})}>Save</button>
+          <button style={M.save} onClick={()=>onSave({name:name.trim()||learner.name, admNo:admNo.trim(), scores, stream:streamSel})}>Save</button>
         </div>
       </div>
     </div>
@@ -1998,6 +2005,7 @@ function ScoreEntryModal({ learner, grade, splitMode, classOptions, onSave, onCl
 }
 
 function AddLearnerModal({ grade, splitMode, defaultStream, classOptions, onAdd, onClose }) {
+  const [admNo, setAdmNo] = useState("");
   const [name, setName] = useState("");
   const opts = (classOptions && classOptions.length) ? classOptions : ["East","West"];
   const [streamSel, setStreamSel] = useState(defaultStream || opts[0]);
@@ -2005,6 +2013,10 @@ function AddLearnerModal({ grade, splitMode, defaultStream, classOptions, onAdd,
     <div style={M.overlay}>
       <div style={{...M.box,maxWidth:360}}>
         <div style={M.title}>Add New Learner</div>
+        <div style={M.field}>
+          <label style={M.label}>Assessment No. (optional)</label>
+          <input style={M.input} value={admNo} onChange={e=>setAdmNo(e.target.value)} placeholder="e.g. 12345678"/>
+        </div>
         <div style={M.field}>
           <label style={M.label}>Full Name</label>
           <input style={M.input} value={name} onChange={e=>setName(e.target.value.toUpperCase())} placeholder="e.g. JANE WANJIKU"/>
@@ -2019,7 +2031,7 @@ function AddLearnerModal({ grade, splitMode, defaultStream, classOptions, onAdd,
         )}
         <div style={M.actions}>
           <button style={M.cancel} onClick={onClose}>Cancel</button>
-          <button style={M.save} onClick={()=>{if(name.trim())onAdd(name.trim(),streamSel);}}>Add Learner</button>
+          <button style={M.save} onClick={()=>{if(name.trim())onAdd(name.trim(),streamSel,admNo.trim());}}>Add Learner</button>
         </div>
       </div>
     </div>
@@ -2277,6 +2289,13 @@ function App() {
   }
   const [subjectTerm, setSubjectTerm]       = useState(()=>localStorage.getItem("sision_last_term")||"Mid Term 2");
   const [subjectYear, setSubjectYear]       = useState(()=>localStorage.getItem("sision_last_year")||"2026");
+  // Without these, a subject teacher's Term/Year selection was never
+  // remembered — logging back in always reset the dropdown to a hardcoded
+  // default, silently pointing at the wrong saved data (looking exactly like
+  // marks had gone missing, when they were actually filed correctly under
+  // whichever term was really selected at upload time).
+  React.useEffect(()=>{ localStorage.setItem("sision_last_term", subjectTerm); }, [subjectTerm]);
+  React.useEffect(()=>{ localStorage.setItem("sision_last_year", subjectYear); }, [subjectYear]);
   const [subjectList, setSubjectList]       = useState([]); // [{name, score}]
   const [subjectLoading, setSubjectLoading] = useState(false);
   const [subjectSaving, setSubjectSaving]   = useState(false);
@@ -2336,7 +2355,7 @@ function App() {
       const existing = DB_CACHE && DB_CACHE[key];
       if (!existing || !existing.length) {
         const proceed = window.confirm(
-          `No existing results found for ${subjectClass.grade==="6"?`Grade 6 ${subjectClass.stream}`:`Grade ${subjectClass.grade}`} under "${subjectTerm} ${subjectYear}".\n\n` +
+          `No existing results found for ${getStreamLabel(subjectClass.grade, subjectClass.stream)} under "${subjectTerm} ${subjectYear}".\n\n` +
           `If other subjects already have marks entered for this class and term, this usually means the Term or Year selected above doesn't match — double-check them before continuing.\n\n` +
           `If this really is the first upload for this class/term, tap OK to continue.`
         );
@@ -2373,7 +2392,18 @@ function App() {
 
   // Class teachers only ever see the class(es) assigned to them. If the
   // current grade/stream isn't one of theirs, snap to their first allowed one.
-  const allowedClasses = isAdmin ? ALL_CLASSES : ((userSession && userSession.classes) || []);
+  // Subject teachers are meant to cover their whole grade band (not one
+  // specific class), so their access is expanded dynamically against the
+  // CURRENT classesConfig — otherwise a class added later via Manage Classes
+  // would be invisible to every subject teacher until each of their logins
+  // was manually edited. Class teachers keep their exact assigned class only.
+  const allowedClasses = isAdmin
+    ? ALL_CLASSES
+    : (userSession && userSession.role === "subjectTeacher")
+      ? Object.keys(classesConfig)
+          .filter(g => (userSession.classes||[]).some(c=>c.grade===g))
+          .flatMap(g => (classesConfig[g]||[""]).map(cls => ({grade:g, stream:cls})))
+      : ((userSession && userSession.classes) || []);
   const allowedGrades = [...new Set(allowedClasses.map(c => c.grade))];
   useEffect(() => {
     if (userSession && !isAdmin && allowedClasses.length) {
@@ -2412,7 +2442,7 @@ function App() {
   const filledLearners = ranked.filter(l=>l.total>0);
   const hasScores = filledLearners.length>0;
 
-  // Per-subject ranks across the full combined list (East+West merged)
+  // Per-subject ranks across the full combined list (all classes in this grade merged)
   const combinedForRanks = splitCombined ? splitCombined.combined : singleRanked;
   // subjectRankMap[learnerName][subject] = "3/62"
   const subjectRankMap = calcSubjectRanks(combinedForRanks);
@@ -2553,14 +2583,15 @@ function App() {
   async function loadOneLearnersList(gr, str) {
     const lk = learnersKey(gr, str||"");
     const stored = await loadShared(lk, null);
-    // Only use the names from the saved roster — NEVER carry over its scores,
-    // since those scores belong to whichever term was last saved. The correct
-    // term's marks (if any) are applied separately below by loadOneScores.
-    if (stored && stored.length > 0) return stored.map(l=>({name:l.name, scores:blankScores()}));
+    // Only use the names (and Assessment No.) from the saved roster — NEVER
+    // carry over its scores, since those scores belong to whichever term was
+    // last saved. The correct term's marks (if any) are applied separately
+    // below by loadOneScores.
+    if (stored && stored.length > 0) return stored.map(l=>({name:l.name, admNo:l.admNo||"", scores:blankScores()}));
     // Fall back to initial data only for 2026 (seed year)
     if (Number(year) <= 2026) {
       const base = (INITIAL_LEARNERS[gr]||{})[str||""]||[];
-      return base.map(l=>({name:l.name, scores:blankScores()}));
+      return base.map(l=>({name:l.name, admNo:l.admNo||"", scores:blankScores()}));
     }
     // In 2027+ with no stored data, start empty
     return [];
@@ -2590,7 +2621,7 @@ function App() {
   // whenever it currently has more than one class.
   function isSplitGrade(g) {
     const classes = classesConfig[g] || [""];
-    const isDefaultGrade6 = g==="6" && classes.length===2 && classes[0]==="East" && classes[1]==="West";
+    const isDefaultGrade6 = g==="6" && classes.length===2 && classes.includes("East") && classes.includes("West");
     if (isDefaultGrade6) {
       if (Number(year) < 2027) return true;
       return grade6Mode==="split";
@@ -2634,8 +2665,8 @@ function App() {
       let ok = true;
       const merged = {};
       for (const cls of classes) {
-        const localList = (learnersByClass[cls]||[]).map(l=>({name:l.name,scores:l.scores}));
-        ok = await saveShared(learnersKey(grade,cls), localList.map(l=>({name:l.name}))) && ok;
+        const localList = (learnersByClass[cls]||[]).map(l=>({name:l.name,admNo:l.admNo||"",scores:l.scores}));
+        ok = await saveShared(learnersKey(grade,cls), localList.map(l=>({name:l.name,admNo:l.admNo||""}))) && ok;
         const result = await saveScoresSafely(storageKey(grade,cls,term,year), localList, baselineRef.current);
         ok = ok && result.ok;
         if (result.ok) merged[cls] = result.merged;
@@ -2679,7 +2710,7 @@ function App() {
     const split = isSplitGrade(grade);
     const oldStream = learner.stream || stream;
     const newStream = split ? (payload.stream || oldStream) : "";
-    const updated = { name: payload.name, scores: payload.scores };
+    const updated = { name: payload.name, admNo: payload.admNo||"", scores: payload.scores };
 
     if (split && newStream !== oldStream) {
       // Move learner from old stream's list to the new one
@@ -2696,12 +2727,12 @@ function App() {
     setDirty(true);
   }
 
-  function handleAddLearner(name, streamSel) {
+  function handleAddLearner(name, streamSel, admNo) {
     const split = isSplitGrade(grade);
     const targetStream = split ? (streamSel || stream) : "";
     const lrns = getLearnersByStream(targetStream);
     if (lrns.find(l=>l.name===name)){setShowAddLearner(false);return;}
-    setLearnersByStream(targetStream, [...lrns,{name,scores:blankScores()}]);
+    setLearnersByStream(targetStream, [...lrns,{name,admNo:admNo||"",scores:blankScores()}]);
     setShowAddLearner(false);
     setDirty(true);
   }
@@ -2725,13 +2756,20 @@ function App() {
     return container ? Array.from(container.children).find(ch=>ch.getAttribute("data-name")===mode.name) : null;
   }
 
-  function buildPrintableHTML(node, isList, filename, autoPrint) {
+  function buildPrintableHTML(node, isList, filename, autoPrint, isMulti) {
+    // page-break-after is only useful (and only wanted) when this HTML holds
+    // several report cards/class lists back to back ("all report forms").
+    // Applying it to a SINGLE report/list forces a pointless, mostly-blank
+    // trailing page after the only page of real content — that was a real
+    // bug: every single-item print/download got an extra blank page.
+    const pageBreakCSS = isMulti
+      ? `.report-card{page-break-after:always;}\n  .print-classlist{page-break-after:always;}`
+      : `.report-card:not(:last-child){page-break-after:always;}\n  .print-classlist:not(:last-child){page-break-after:always;}`;
     return `<!DOCTYPE html><html><head><meta charset="utf-8"/><title>${filename}</title>
 <style>
   body{margin:0;background:#fff;font-family:Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
   .no-print{display:none!important;}
-  .report-card{page-break-after:always;}
-  .print-classlist{page-break-after:always;}
+  ${pageBreakCSS}
   @page{size:A4 ${isList?"landscape":"portrait"};margin:0.7cm;}
   table{border-collapse:collapse;}
   #__printBtnBar{position:sticky;top:0;background:#111;padding:10px;text-align:center;z-index:999;}
@@ -2739,16 +2777,17 @@ function App() {
 </style>
 </head><body>
 <div id="__printBtnBar" class="no-print"><button onclick="window.print()">🖨 Print This Page</button></div>
-${node.innerHTML}
+${node.outerHTML}
 ${autoPrint ? "<scr"+"ipt>window.onload=function(){setTimeout(function(){window.print();},300);};</scr"+"ipt>" : ""}
 </body></html>`;
   }
 
   function handleDownload(mode, filename) {
     const isList = mode==="blank" || mode==="filled";
+    const isMulti = mode==="all";
     const node = findPrintNode(mode);
     if (!node) { alert("That report isn't ready yet — make sure marks have been entered, then try again."); return; }
-    const html = buildPrintableHTML(node, isList, filename, false);
+    const html = buildPrintableHTML(node, isList, filename, false, isMulti);
     const blob = new Blob([html], {type:"text/html"});
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -2765,9 +2804,10 @@ ${autoPrint ? "<scr"+"ipt>window.onload=function(){setTimeout(function(){window.
   // than trying to print directly from inside the live app.
   function handlePrint(mode, filename) {
     const isList = mode==="blank" || mode==="filled";
+    const isMulti = mode==="all";
     const node = findPrintNode(mode);
     if (!node) { alert("That report isn't ready yet — make sure marks have been entered, then try again."); return; }
-    const html = buildPrintableHTML(node, isList, filename, true);
+    const html = buildPrintableHTML(node, isList, filename, true, isMulti);
     const blob = new Blob([html], {type:"text/html"});
     const url = URL.createObjectURL(blob);
     const win2 = window.open(url, "_blank");
@@ -3275,9 +3315,15 @@ ${autoPrint ? "<scr"+"ipt>window.onload=function(){setTimeout(function(){window.
   if (!userSession) return <LoginScreen onLogin={(session) => {
     setUserSession(session);
     if (session.role === "subjectTeacher") {
-      setSubjectSession({ pin: session.username, name: session.name, subjects: session.subjects, classes: session.classes });
-      if (session.classes.length === 1) {
-        setSubjectClass(session.classes[0]);
+      // Expand to every class currently in classesConfig for this teacher's
+      // grade band, not just the classes captured in USERS at load time —
+      // otherwise a class added later via Manage Classes would be invisible
+      // to subject teachers until their login was manually edited.
+      const bandGrades = [...new Set((session.classes||[]).map(c=>c.grade))];
+      const dynamicClasses = bandGrades.flatMap(g => (classesConfig[g]||[""]).map(cls => ({grade:g, stream:cls})));
+      setSubjectSession({ pin: session.username, name: session.name, subjects: session.subjects, classes: dynamicClasses });
+      if (dynamicClasses.length === 1) {
+        setSubjectClass(dynamicClasses[0]);
         if (session.subjects.length === 1) { setSubjectChoice(session.subjects[0]); setPage("subjectEntry"); }
         else setPage("subjectSubjectPick");
       } else {
@@ -3702,6 +3748,7 @@ ${autoPrint ? "<scr"+"ipt>window.onload=function(){setTimeout(function(){window.
                 <th style={S.th}>Class Rank</th>
                 {split && <th style={S.th}>Gr. Rank</th>}
                 {viewMode==="combined" && <th style={S.th}>Stream</th>}
+                <th style={{...S.th,textAlign:"left",minWidth:70}}>Adm No.</th>
                 <th style={{...S.th,textAlign:"left",minWidth:140}}>Name</th>
                 {SUBJECTS.map(s=><th key={s} style={S.th}>{subjAbbr(s)}</th>)}
                 <th style={S.th}>Total</th>
@@ -3727,6 +3774,7 @@ ${autoPrint ? "<scr"+"ipt>window.onload=function(){setTimeout(function(){window.
                     {viewMode==="combined" && (
                       <td style={{...S.tdC,borderRight:"1px solid #e0e0e0",fontSize:10}}>{l.stream}</td>
                     )}
+                    <td style={{...S.td,fontSize:11,color:"#666",borderRight:"1px solid #e0e0e0"}}>{l.admNo||"–"}</td>
                     <td style={{...S.td,fontWeight:700,borderRight:"1px solid #e0e0e0"}}>{l.name}</td>
                     {SUBJECTS.map(sub=>{
                       const g=getGrade(l.scores[sub]);
@@ -3854,7 +3902,7 @@ const S = {
 };
 
 const RC = {
-  page:        {background:"#fff",color:"#000",width:"190mm",minHeight:"267mm",margin:"0 auto 30px",padding:"10mm 12mm",fontFamily:"Arial,sans-serif",fontSize:11,boxSizing:"border-box",border:"1px solid #888",display:"flex",flexDirection:"column"},
+  page:        {background:"#fff",color:"#000",width:"190mm",minHeight:"267mm",margin:"0 auto 30px",padding:"10mm 12mm 22mm",fontFamily:"Arial,sans-serif",fontSize:11,boxSizing:"border-box",border:"1px solid #888",position:"relative"},
   header:      {borderBottom:"3px solid #000",marginBottom:8,paddingBottom:7,textAlign:"center"},
   schoolName:  {fontSize:20,fontWeight:900,letterSpacing:1,color:"#000"},
   schoolSub:   {fontSize:10,color:"#444"},
@@ -3884,11 +3932,11 @@ const RC = {
   commentLabel: {fontSize:8,fontWeight:800,letterSpacing:0.5,color:"#333"},
   commentText: {fontSize:9.5,lineHeight:1.4,color:"#222",marginTop:2,fontStyle:"italic"},
   datesLine:   {fontSize:10,color:"#000",marginBottom:6},
-  footer:      {textAlign:"center",fontSize:8,color:"#555",borderTop:"1px solid #bbb",paddingTop:5,marginTop:4},
+  footer:      {textAlign:"center",fontSize:8,color:"#555",borderTop:"1px solid #bbb",paddingTop:5,position:"absolute",left:"12mm",right:"12mm",bottom:"10mm"},
 };
 
 const CL = {
-  page:       {background:"#fff",color:"#000",fontFamily:"Arial,sans-serif",fontSize:12,padding:"5mm 7mm",boxSizing:"border-box",minHeight:"180mm",display:"flex",flexDirection:"column"},
+  page:       {background:"#fff",color:"#000",fontFamily:"Arial,sans-serif",fontSize:12,padding:"5mm 7mm 18mm",boxSizing:"border-box",minHeight:"180mm",position:"relative"},
   header:     {textAlign:"center",borderBottom:"3px solid #000",marginBottom:10,paddingBottom:7},
   schoolName: {fontSize:20,fontWeight:900,color:"#000",letterSpacing:1},
   sub:        {fontSize:12,color:"#333",marginTop:3},
@@ -3896,7 +3944,7 @@ const CL = {
   th:         {background:"#fff",color:"#000",padding:"8px 6px",fontWeight:800,textAlign:"center",border:"1px solid #000",borderBottom:"2.5px solid #000",fontSize:11.5},
   td:         {padding:"8px 6px",border:"1px solid #bbb",color:"#000"},
   tdC:        {padding:"8px 6px",border:"1px solid #bbb",color:"#000",textAlign:"center"},
-  footer:     {textAlign:"center",fontSize:10,color:"#555",borderTop:"1px solid #ccc",paddingTop:6,marginTop:8},
+  footer:     {textAlign:"center",fontSize:10,color:"#555",borderTop:"1px solid #ccc",paddingTop:6,position:"absolute",left:"7mm",right:"7mm",bottom:"6mm"},
 };
 
 const M = {

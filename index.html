@@ -349,17 +349,26 @@ const GRADE_LOCK = null; // unlocked — combined app covers Grades 1–6
 // All marks are stored in db.json inside your GitHub repo via the GitHub API.
 // No Firebase, no external service — just GitHub.
 
+// Namespace every localStorage key by the app's own path (repo name on GitHub
+// Pages), since multiple Sision-family apps can share one browser origin
+// (e.g. username.github.io/RepoA/ and username.github.io/RepoB/) and would
+// otherwise silently read/write each other's saved token, username, and repo.
+function nsKey(base) {
+  var seg = (window.location.pathname.split("/")[1] || "default");
+  return base + "__" + seg;
+}
+
 function resolveGHConfig() {
   try {
     const p = new URLSearchParams(window.location.search);
     const t = p.get("t"), o = p.get("o"), r = p.get("r");
     if (t && o && r) {
       const cfg = { token: t, owner: o, repo: r };
-      localStorage.setItem("sision_gh", JSON.stringify(cfg));
+      localStorage.setItem(nsKey("sision_gh"), JSON.stringify(cfg));
       return cfg;
     }
   } catch {}
-  try { const s = localStorage.getItem("sision_gh"); if (s) return JSON.parse(s); } catch {}
+  try { const s = localStorage.getItem(nsKey("sision_gh")); if (s) return JSON.parse(s); } catch {}
   return null;
 }
 
@@ -877,7 +886,7 @@ function SetupScreen({ onDone }) {
       if (!res.ok) { setStatus("fail"); return; }
       GH = { token: t, owner: o, repo: r };
       DB_CACHE = null; DB_SHA = null;
-      localStorage.setItem("sision_gh", JSON.stringify(GH));
+      localStorage.setItem(nsKey("sision_gh"), JSON.stringify(GH));
       setStatus("ok");
       setTimeout(onDone, 700);
     } catch { setStatus("fail"); }
@@ -988,7 +997,7 @@ function LoginScreen({ onLogin }) {
     } catch {}
     const session = { username: uname, role: entry.role, name: displayName,
       classes: entry.classes || [], subjects: entry.subjects || [] };
-    try { localStorage.setItem("sision_user_session", JSON.stringify(session)); } catch {}
+    try { localStorage.setItem(nsKey("sision_user_session"), JSON.stringify(session)); } catch {}
     onLogin(session);
   }
 
@@ -2135,21 +2144,21 @@ function App() {
   const [userSession, setUserSession] = useState(() => {
     try {
       const urlUser = new URLSearchParams(window.location.search).get("u");
-      const s = localStorage.getItem("sision_user_session");
+      const s = localStorage.getItem(nsKey("sision_user_session"));
       if (!s) return null;
       const parsed = JSON.parse(s);
       // If this link was meant for a specific person (via ?u=) and it doesn't
       // match whoever is currently remembered on this device, don't silently
       // resume the wrong person's session — force a fresh login instead.
       if (urlUser && parsed && parsed.username !== urlUser.trim().toLowerCase()) {
-        localStorage.removeItem("sision_user_session");
+        localStorage.removeItem(nsKey("sision_user_session"));
         return null;
       }
       return parsed;
     } catch { return null; }
   });
     function logout() {
-    try { localStorage.removeItem("sision_user_session"); } catch {}
+    try { localStorage.removeItem(nsKey("sision_user_session")); } catch {}
     setUserSession(null);
   }
   const isAdmin = !!userSession && userSession.role === "admin";
@@ -2207,10 +2216,10 @@ function App() {
   const [stream, setStream]       = useState("East");
   // "view" mode: "stream" = single class, "combined" = all Grade 6
   const [viewMode, setViewMode]   = useState("stream");
-  const [term, setTerm]           = useState(()=>localStorage.getItem("sision_last_term")||"Mid Term 2");
-  const [year, setYear]           = useState(()=>localStorage.getItem("sision_last_year")||"2026");
-  React.useEffect(()=>{ localStorage.setItem("sision_last_term", term); }, [term]);
-  React.useEffect(()=>{ localStorage.setItem("sision_last_year", year); }, [year]);
+  const [term, setTerm]           = useState(()=>localStorage.getItem(nsKey("sision_last_term"))||"Mid Term 2");
+  const [year, setYear]           = useState(()=>localStorage.getItem(nsKey("sision_last_year"))||"2026");
+  React.useEffect(()=>{ localStorage.setItem(nsKey("sision_last_term"), term); }, [term]);
+  React.useEffect(()=>{ localStorage.setItem(nsKey("sision_last_year"), year); }, [year]);
   const [classTeacher, setClassTeacher] = useState("");
 
   // Year advancement wizard
@@ -2287,15 +2296,15 @@ function App() {
     const activeGrade = isSubjectTeacherView ? subjectClass.grade : grade;
     SUBJECTS = getSubjectsForGrade(activeGrade);
   }
-  const [subjectTerm, setSubjectTerm]       = useState(()=>localStorage.getItem("sision_last_term")||"Mid Term 2");
-  const [subjectYear, setSubjectYear]       = useState(()=>localStorage.getItem("sision_last_year")||"2026");
+  const [subjectTerm, setSubjectTerm]       = useState(()=>localStorage.getItem(nsKey("sision_last_term"))||"Mid Term 2");
+  const [subjectYear, setSubjectYear]       = useState(()=>localStorage.getItem(nsKey("sision_last_year"))||"2026");
   // Without these, a subject teacher's Term/Year selection was never
   // remembered — logging back in always reset the dropdown to a hardcoded
   // default, silently pointing at the wrong saved data (looking exactly like
   // marks had gone missing, when they were actually filed correctly under
   // whichever term was really selected at upload time).
-  React.useEffect(()=>{ localStorage.setItem("sision_last_term", subjectTerm); }, [subjectTerm]);
-  React.useEffect(()=>{ localStorage.setItem("sision_last_year", subjectYear); }, [subjectYear]);
+  React.useEffect(()=>{ localStorage.setItem(nsKey("sision_last_term"), subjectTerm); }, [subjectTerm]);
+  React.useEffect(()=>{ localStorage.setItem(nsKey("sision_last_year"), subjectYear); }, [subjectYear]);
   const [subjectList, setSubjectList]       = useState([]); // [{name, score}]
   const [subjectLoading, setSubjectLoading] = useState(false);
   const [subjectSaving, setSubjectSaving]   = useState(false);
